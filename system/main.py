@@ -5,7 +5,7 @@ from PIL import ImageEnhance
 
 if __name__ == '__main__':
 
-    files = argv[1:]
+    files = ['./imgs/1.jpg']#argv[1:]
 
     qntt_files = len(files)
 
