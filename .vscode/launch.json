@@ -5,10 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: 当前文件",
+            "name": "new",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "old",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/system/main.py",
             "console": "integratedTerminal"
         }
     ]
