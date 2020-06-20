@@ -215,7 +215,7 @@ def isolate_scoliosis(img):
 def trace_line(img):
     image = img.copy()             
     width, height = img.size
-    ten_percent_height = int(height * 0.1)
+    ten_percent_height = int(height * 0.05)
     points_list = [i for i in range(ten_percent_height, height, ten_percent_height)]
 
     pixels_points = []

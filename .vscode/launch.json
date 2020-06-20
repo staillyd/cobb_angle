@@ -5,14 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "main",
+            "name": "new",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "old",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/system/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "./image_tests/1.jpg"
-            ]
+            "console": "integratedTerminal"
         }
     ]
 }
