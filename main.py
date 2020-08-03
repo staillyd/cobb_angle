@@ -2,6 +2,8 @@ import os
 import cv2
 import numpy as np
 from scipy.signal import savgol_filter
+from scipy.optimize import least_squares
+import matplotlib.pyplot as plt
 
 class Cobb_Angle(object):
     def __init__(self):
@@ -57,7 +59,22 @@ class Cobb_Angle(object):
             # self.show_img=self._draw_track(self.show_img)
             # self.show('track',self.show_img,debug_sign)
 
+            self.show_img=cv2.cvtColor(self.show_img,cv2.COLOR_GRAY2BGR)
+
+            self._fit_track()
+            self.show_img=self._draw_fit_track(self.show_img)
+            self.show('fit track',self.show_img,debug_sign)
+
+            self._get_turning_point()
+            self.show_img=self._draw_turning_point(self.show_img)
+            self.show('turning point',self.show_img,debug_sign)
+
+            self._get_theta()
+            self.show_img=self._draw_theta(self.show_img)
+            self.show('theta',self.show_img,debug_sign)
+
             self.show_keep()
+            plt.show()
 
     def show(self,name,img,debug_sign=False):
         if not debug_sign:
@@ -66,7 +83,7 @@ class Cobb_Angle(object):
         cv2.imshow(name,img)
         
     def show_keep(self):
-        key=cv2.waitKey()&0xFF
+        key=cv2.waitKey()& 0xFF==ord('q')
 
     def _crop_roi(self,img,ratio_mean,ratio_size):
         H,W=img.shape[0:2]
@@ -104,6 +121,7 @@ class Cobb_Angle(object):
             except:
                 pass
         track=np.vstack([[range(img.shape[0])],np.mean(track,axis=1)]).T
+        track=track[:int(19/20*img.shape[0])]#去除最底部的干扰
         self.track=track[np.where(track[:,1]!=-1)].astype(np.int)
     
     def _draw_track(self,img):
@@ -113,7 +131,77 @@ class Cobb_Angle(object):
         return img
         
     def _smooth_track(self):
+        '''平滑曲线'''
         self.track[:,1]=savgol_filter(self.track[:,1],101,2)
+
+    def _fit_err(self,param,x,y):
+        '''多项式拟合的误差'''
+        return self._get_fit_vals(param,x)-y
+
+    def _get_fit_vals(self,param,x):
+        '''多项式拟合'''
+        val=0
+        for i in range(len(param)):
+            val+=param[i]*x**i
+        return val
+
+    def _fit_track(self,plt_flag=False):
+        param_init=[0,0,0,0,0,0]
+        param=least_squares(self._fit_err,param_init,args=(self.track[:,0],self.track[:,1])).x
+        x=np.array([i for i in range(self.show_img.shape[0])])#np.linspace(0, self.show_img.shape[0], 400)
+        y=self._get_fit_vals(param,x)
+        self.fit_track=np.vstack([x,y]).T
+        if plt_flag:
+            plt.figure()
+            plt.xlim([0,self.show_img.shape[0]])
+            plt.ylim([0,self.show_img.shape[1]])
+            plt.gca().set_aspect(1)
+            plt.plot(self.track[:,0],self.track[:,1],'b')
+            plt.plot(x,y,'r')
+            # plt.show()
+
+    def _draw_fit_track(self,img):
+        track=self.fit_track.astype(int)
+        for i in range(1,len(track)):#img:(h,w)
+            cv2.line(img,(track[i][1],track[i][0]),\
+                        (track[i-1][1],track[i-1][0]),(255,0,0),3)#w,h
+        return img
+
+    def _get_turning_point(self,plt_flag=False):
+        diff_1=self.fit_track[1:,1]-self.fit_track[:-1,1]
+        self.turning_point=[]
+        self.turning_point.append([0,self.fit_track[0,1]])
+        for i in range(len(diff_1)-1):
+            if diff_1[i+1]*diff_1[i]<0:
+                self.turning_point.append([i,self.fit_track[i,1]])
+        self.turning_point.append([len(self.track)-1,self.fit_track[len(self.track)-1][1]])
+
+        if plt_flag:
+            for x,y in self.turning_point:
+                plt.plot(x,y,'r*')
+        
+    def _draw_turning_point(self,img):
+        for x,y in self.turning_point:
+            cv2.circle(img,(int(y),int(x)),5,(0,0,255),-1)
+        return img
+
+    def _get_theta(self):
+        self.theta=[]
+        for i in range(len(self.turning_point)-2):
+            a=np.array([self.turning_point[i][0]-self.turning_point[i+1][0],\
+                        self.turning_point[i][1]-self.turning_point[i+1][1]])
+            b=np.array([self.turning_point[i+2][0]-self.turning_point[i+1][0],\
+                        self.turning_point[i+2][1]-self.turning_point[i+1][1]])
+            self.theta.append(np.arccos(a.dot(b)/(np.sqrt(a.dot(a)) * np.sqrt(b.dot(b))))*180/np.pi)
+    
+    def _draw_theta(self,img):
+        for i in range(len(self.turning_point)-1):
+            cv2.line(img,(int(self.turning_point[i][1]),int(self.turning_point[i][0])),\
+                (int(self.turning_point[i+1][1]),int(self.turning_point[i+1][0])),(0,0,255))
+        for i in range(len(self.turning_point)-2):
+            cv2.putText(img,'%.2f'%(self.theta[i]),(int(self.turning_point[i+1][1]),int(self.turning_point[i+1][0])),\
+                cv2.FONT_HERSHEY_COMPLEX,6e-1,(0,0,255),2)
+        return img
 
     def _yield_filename(self,path):
         for home,_,files in os.walk(path):
