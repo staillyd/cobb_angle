@@ -2,7 +2,10 @@ import os
 import cv2
 import numpy as np
 from scipy.signal import savgol_filter
-from scipy.optimize import least_squares
+# from scipy.optimize import least_squares
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 import matplotlib.pyplot as plt
 
 class Cobb_Angle(object):
@@ -145,12 +148,17 @@ class Cobb_Angle(object):
             val+=param[i]*x**i
         return val
 
-    def _fit_track(self,plt_flag=False):
-        param_init=[0,0,0,0,0,0]
-        param=least_squares(self._fit_err,param_init,args=(self.track[:,0],self.track[:,1])).x
-        x=np.array([i for i in range(self.show_img.shape[0])])#np.linspace(0, self.show_img.shape[0], 400)
-        y=self._get_fit_vals(param,x)
-        self.fit_track=np.vstack([x,y]).T
+    def _fit_track(self,plt_flag=True):
+        # param_init=[0,0,0,0,0,0]
+        # param=least_squares(self._fit_err,param_init,args=(self.track[:,0],self.track[:,1])).x
+        # x=np.array([i for i in range(self.show_img.shape[0])])#np.linspace(0, self.show_img.shape[0], 400)
+        # y=self._get_fit_vals(param,x)
+        # self.fit_track=np.vstack([x,y]).T
+        model = make_pipeline(PolynomialFeatures(4), Ridge())
+        model.fit(self.track[:,0].reshape(-1,1),self.track[:,1].reshape(-1,1))
+        x=np.array([i for i in range(self.show_img.shape[0])]).reshape(-1,1)
+        y=model.predict(x)
+        self.fit_track=np.hstack([x,y])
         if plt_flag:
             plt.figure()
             plt.xlim([0,self.show_img.shape[0]])
