@@ -7,6 +7,7 @@ from sklearn.linear_model import Ridge
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 import matplotlib.pyplot as plt
+# from sympy import diff,symbols,solve
 
 class Cobb_Angle(object):
     def __init__(self):
@@ -69,12 +70,16 @@ class Cobb_Angle(object):
             self.show('fit track',self.show_img,debug_sign)
 
             self._get_turning_point()
-            self.show_img=self._draw_turning_point(self.show_img)
+            self.show_img=self._draw_turning_and_diff_point(self.show_img)
             self.show('turning point',self.show_img,debug_sign)
 
-            self._get_theta()
-            self.show_img=self._draw_theta(self.show_img)
-            self.show('theta',self.show_img,debug_sign)
+            self._get_theta_by_turnning_points()
+            self.show_img=self._draw_theta_from_turnning_points(self.show_img)
+            self.show('theta_by_turnning_points',self.show_img,debug_sign)
+
+            # self._get_theta_by_tangent()
+            # self.show_img=self._draw_theta_from_tangent(self.show_img)
+            # self.show('theta_by_tangent',self.show_img,debug_sign)
 
             self.show_keep()
             plt.show()
@@ -148,6 +153,16 @@ class Cobb_Angle(object):
             val+=param[i]*x**i
         return val
 
+    # def _get_sympy_derivative(self,model):#导数为0是拐点，二阶导数为0判断凹凸。没必要用导数，直接对拟合值求diff判断+-即可得到拐点
+    #     '''求导数'''
+    #     x=symbols('x')
+    #     powers=model.steps[0][1].powers_.reshape(-1)
+    #     weights=model.steps[1][1].coef_.reshape(-1);weights[0]=model.steps[1][1].intercept_.reshape(-1)
+    #     y=0
+    #     for i in range(len(powers)):#由于是岭回归,正则项对x求导为0,不用管
+    #         y+=weights[i]*x**powers[i]
+    #     solve(diff(y,x),x)
+
     def _fit_track(self,plt_flag=True):
         # param_init=[0,0,0,0,0,0]
         # param=least_squares(self._fit_err,param_init,args=(self.track[:,0],self.track[:,1])).x
@@ -175,7 +190,8 @@ class Cobb_Angle(object):
                         (track[i-1][1],track[i-1][0]),(255,0,0),3)#w,h
         return img
 
-    def _get_turning_point(self,plt_flag=False):
+    def _get_turning_point(self,plt_flag=True):
+        '''求拐点,并且求切线'''
         diff_1=self.fit_track[1:,1]-self.fit_track[:-1,1]
         self.turning_point=[]
         self.turning_point.append([0,self.fit_track[0,1]])
@@ -184,30 +200,78 @@ class Cobb_Angle(object):
                 self.turning_point.append([i,self.fit_track[i,1]])
         self.turning_point.append([len(self.track)-1,self.fit_track[len(self.track)-1][1]])
 
+        self.max_abs_diff_points=[]
+        for i in range(len(self.turning_point)-1):
+            this_slice=diff_1[self.turning_point[i][0]:self.turning_point[i+1][0]]
+            max_abs_diff_idx=np.argmax(abs(this_slice))+self.turning_point[i][0]
+            self.max_abs_diff_points.append([max_abs_diff_idx,self.fit_track[max_abs_diff_idx,1]])#x,y,k
+        self.intersection_of_max_abs_diff_points=[]
+        for i in range(len(self.max_abs_diff_points)-1):
+            x1=self.max_abs_diff_points[i][0]
+            y1=self.max_abs_diff_points[i][1]
+            k1=diff_1[x1]
+            x2=self.max_abs_diff_points[i+1][0]
+            y2=self.max_abs_diff_points[i+1][1]
+            k2=diff_1[x2]
+            intersection_x=(y2-k2*x2-y1+k1*x1)/(k1-k2)
+            intersection_y=(k1*y2-k1*k2*x2-k2*y1+k1*k2*x1)/(k1-k2)
+            self.intersection_of_max_abs_diff_points.append([intersection_x,intersection_y])           
+
         if plt_flag:
             for x,y in self.turning_point:
                 plt.plot(x,y,'r*')
+            for x,y in self.max_abs_diff_points:
+                plt.plot(x,y,'b^')
+            for x,y in self.intersection_of_max_abs_diff_points:
+                plt.plot(x,y,'b^')
         
-    def _draw_turning_point(self,img):
+    def _draw_turning_and_diff_point(self,img):
         for x,y in self.turning_point:
             cv2.circle(img,(int(y),int(x)),5,(0,0,255),-1)
+        for x,y in self.max_abs_diff_points:
+            cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
+        for x,y in self.intersection_of_max_abs_diff_points:
+            cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
         return img
 
-    def _get_theta(self):
-        self.theta=[]
+    def _get_theta_by_turnning_points(self):
+        self.theta_by_turnning_points=[]
         for i in range(len(self.turning_point)-2):
             a=np.array([self.turning_point[i][0]-self.turning_point[i+1][0],\
                         self.turning_point[i][1]-self.turning_point[i+1][1]])
             b=np.array([self.turning_point[i+2][0]-self.turning_point[i+1][0],\
                         self.turning_point[i+2][1]-self.turning_point[i+1][1]])
-            self.theta.append(np.arccos(a.dot(b)/(np.sqrt(a.dot(a)) * np.sqrt(b.dot(b))))*180/np.pi)
+            self.theta_by_turnning_points.append(np.arccos(a.dot(b)/(np.sqrt(a.dot(a)) * np.sqrt(b.dot(b))))*180/np.pi)
     
-    def _draw_theta(self,img):
+    def _draw_theta_from_turnning_points(self,img):
         for i in range(len(self.turning_point)-1):
             cv2.line(img,(int(self.turning_point[i][1]),int(self.turning_point[i][0])),\
                 (int(self.turning_point[i+1][1]),int(self.turning_point[i+1][0])),(0,0,255))
         for i in range(len(self.turning_point)-2):
-            cv2.putText(img,'%.2f'%(self.theta[i]),(int(self.turning_point[i+1][1]),int(self.turning_point[i+1][0])),\
+            cv2.putText(img,'%.2f'%(self.theta_by_turnning_points[i]),(int(self.turning_point[i+1][1]),int(self.turning_point[i+1][0])),\
+                cv2.FONT_HERSHEY_COMPLEX,6e-1,(0,0,255),2)
+        return img
+
+    def _get_theta_by_tangent(self):
+        self.theta_by_tangent=[]
+        for i in range(len(self.max_abs_diff_points)-1):
+            a=np.array([self.max_abs_diff_points[i][0]-self.intersection_of_max_abs_diff_points[i][0],\
+                self.max_abs_diff_points[i][1]-self.intersection_of_max_abs_diff_points[i][1]])
+            b=np.array([self.max_abs_diff_points[i+1][0]-self.intersection_of_max_abs_diff_points[i][0],\
+                self.max_abs_diff_points[i+1][1]-self.intersection_of_max_abs_diff_points[i][1]])
+            self.theta_by_tangent.append(np.arccos(a.dot(b)/(np.sqrt(a.dot(a)) * np.sqrt(b.dot(b))))*180/np.pi)
+
+    def _draw_theta_from_tangent(self,img):
+        for i in range(len(self.max_abs_diff_points)-1):
+            cv2.line(img,(int(self.max_abs_diff_points[i][1]),int(self.max_abs_diff_points[i][0])),\
+                (int(self.intersection_of_max_abs_diff_points[i][1]),int(self.intersection_of_max_abs_diff_points[i][0])),\
+                    (0,0,255))
+            cv2.line(img,(int(self.max_abs_diff_points[i+1][1]),int(self.max_abs_diff_points[i+1][0])),\
+                (int(self.intersection_of_max_abs_diff_points[i][1]),int(self.intersection_of_max_abs_diff_points[i][0])),\
+                    (0,0,255))
+        for i in range(len(self.intersection_of_max_abs_diff_points)):
+            cv2.putText(img,'%.2f'%(self.theta_by_tangent[i]),(int(self.intersection_of_max_abs_diff_points[i][1]),\
+                int(self.intersection_of_max_abs_diff_points[i][0])),\
                 cv2.FONT_HERSHEY_COMPLEX,6e-1,(0,0,255),2)
         return img
 
