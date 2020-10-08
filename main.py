@@ -15,7 +15,43 @@ class Cobb_Angle(object):
         self.origin_img=None
         self.show_img=None
         self.track=None
-        
+        self.tmp_dir='./tmp/'
+        if not os.path.exists(self.tmp_dir):
+            os.makedirs(self.tmp_dir)
+
+    def process_for_ui(self,file_):
+        self.origin_img=cv2.imread(file_)# h,w,c   g,b,r
+        self.show_img=cv2.cvtColor(self.origin_img,cv2.COLOR_BGR2GRAY)
+        self.show_img=self._crop_roi(self.show_img,1.6,0.6)
+        self.show_img=self._change_contrast(self.show_img)
+        self.show_img=self._drop_pix(self.show_img,0.9)
+        self.show_img=cv2.medianBlur(self.show_img,3)
+        self.show_img=self._change_contrast(self.show_img)           
+        self.show_img=cv2.medianBlur(self.show_img,5)    
+        self.show_img=cv2.Sobel(self.show_img,cv2.CV_16S,1,0,ksize=3)
+        self.show_img=cv2.convertScaleAbs(self.show_img/4)
+        self.show_img=cv2.medianBlur(self.show_img,9)
+        _,self.show_img=cv2.threshold(self.show_img,np.mean(self.show_img),255,cv2.THRESH_BINARY)
+        self._get_track(self.show_img)
+        self._smooth_track()
+        self.show_img=cv2.cvtColor(self.show_img,cv2.COLOR_GRAY2BGR)
+
+        self._fit_track()
+        self.show_img=self._draw_fit_track(self.show_img)
+
+        self._get_turning_and_diff_point()
+        self.show_img=self._draw_turning_and_diff_point(self.show_img)
+
+        self._get_theta_by_turnning_points()
+        self.show_img=self._draw_theta_from_turnning_points(self.show_img)
+
+        # self._get_theta_by_tangent()
+        # self.show_img=self._draw_theta_from_tangent(self.show_img)
+        # self.show('theta_by_tangent',self.show_img,debug_sign)
+
+        cv2.imwrite(self.tmp_dir+'origin.jpg',self.origin_img)
+        cv2.imwrite(self.tmp_dir+'result.jpg',self.show_img)
+ 
     def process(self,debug_sign=False):
         for file_ in self._yield_filename(self.input_path):
             self.origin_img=cv2.imread(file_)# h,w,c   g,b,r
@@ -69,7 +105,7 @@ class Cobb_Angle(object):
             self.show_img=self._draw_fit_track(self.show_img)
             self.show('fit track',self.show_img,debug_sign)
 
-            self._get_turning_point()
+            self._get_turning_and_diff_point()
             self.show_img=self._draw_turning_and_diff_point(self.show_img)
             self.show('turning point',self.show_img,debug_sign)
 
@@ -129,7 +165,7 @@ class Cobb_Angle(object):
             except:
                 pass
         track=np.vstack([[range(img.shape[0])],np.mean(track,axis=1)]).T
-        track=track[:int(19/20*img.shape[0])]#去除最底部的干扰
+        track=track[:int(29/30*img.shape[0])]#去除最底部的干扰
         self.track=track[np.where(track[:,1]!=-1)].astype(np.int)
     
     def _draw_track(self,img):
@@ -190,7 +226,7 @@ class Cobb_Angle(object):
                         (track[i-1][1],track[i-1][0]),(255,0,0),3)#w,h
         return img
 
-    def _get_turning_point(self,plt_flag=True):
+    def _get_turning_and_diff_point(self,plt_flag=False):
         '''求拐点,并且求切线'''
         diff_1=self.fit_track[1:,1]-self.fit_track[:-1,1]
         self.turning_point=[]
@@ -220,18 +256,18 @@ class Cobb_Angle(object):
         if plt_flag:
             for x,y in self.turning_point:
                 plt.plot(x,y,'r*')
-            for x,y in self.max_abs_diff_points:
-                plt.plot(x,y,'b^')
-            for x,y in self.intersection_of_max_abs_diff_points:
-                plt.plot(x,y,'b^')
+            # for x,y in self.max_abs_diff_points:
+            #     plt.plot(x,y,'b^')
+            # for x,y in self.intersection_of_max_abs_diff_points:
+            #     plt.plot(x,y,'b^')
         
     def _draw_turning_and_diff_point(self,img):
         for x,y in self.turning_point:
             cv2.circle(img,(int(y),int(x)),5,(0,0,255),-1)
-        for x,y in self.max_abs_diff_points:
-            cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
-        for x,y in self.intersection_of_max_abs_diff_points:
-            cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
+        # for x,y in self.max_abs_diff_points:
+        #     cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
+        # for x,y in self.intersection_of_max_abs_diff_points:
+        #     cv2.circle(img,(int(y),int(x)),5,(255,0,0),-1)
         return img
 
     def _get_theta_by_turnning_points(self):
